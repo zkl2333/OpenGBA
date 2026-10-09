@@ -24,6 +24,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -152,10 +153,25 @@ class MainActivity : RetrogradeComponentActivity(), BusyActivity {
                     ?: MainRoute.HOME
             val pageIndicatorState = remember { mutableStateOf<String?>(null) }
             val navigationFocusRequester = remember { FocusRequester() }
+            val refocusRailAfterBack = remember { mutableStateOf(false) }
 
             LaunchedEffect(currentRoute) {
                 mainViewModel.changeRoute(currentRoute)
                 pageIndicatorState.value = null
+            }
+
+            // The rail navigates on focus: when B pops a screen, the focusRestorer would
+            // re-focus the rail item of the screen we just left and navigate straight back
+            // to it. The B handler clears focus before popping (the popped screen is
+            // disposed in the same frame, before any effect can run), and this effect then
+            // focuses the destination's rail item after recomposition, when the requester
+            // is attached to the newly selected item. In portrait there is no rail, so the
+            // request is skipped.
+            LaunchedEffect(currentRoute, refocusRailAfterBack.value) {
+                if (refocusRailAfterBack.value) {
+                    runCatching { navigationFocusRequester.requestFocus() }
+                    refocusRailAfterBack.value = false
+                }
             }
 
             val selectedGameState =
@@ -183,6 +199,7 @@ class MainActivity : RetrogradeComponentActivity(), BusyActivity {
 
             val configuration = LocalConfiguration.current
             val wideLayout = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+            val focusManager = LocalFocusManager.current
 
             Column(
                 modifier =
@@ -195,6 +212,11 @@ class MainActivity : RetrogradeComponentActivity(), BusyActivity {
                                 event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BUTTON_B &&
                                 currentRoute != MainRoute.HOME
                             ) {
+                                // Drop focus before popping: the popped screen is disposed
+                                // in the same frame, and a focused card would trigger the
+                                // rail's focus restoration (which navigates on focus).
+                                focusManager.clearFocus()
+                                refocusRailAfterBack.value = true
                                 navController.popBackStack()
                                 true
                             } else {

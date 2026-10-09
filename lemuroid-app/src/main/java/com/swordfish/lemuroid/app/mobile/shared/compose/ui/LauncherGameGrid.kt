@@ -39,6 +39,7 @@ import kotlin.math.abs
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -158,6 +159,7 @@ fun LauncherGameGrid(
 
     val gridState = rememberLazyGridState()
     val swipeThreshold = with(LocalDensity.current) { 64.dp.toPx() }
+    val focusManager = LocalFocusManager.current
 
     fun changePage(
         direction: Int,
@@ -165,6 +167,10 @@ fun LauncherGameGrid(
     ): Boolean {
         val nextPage = (safePage + direction).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
         if (nextPage == safePage) return false
+        // The focused card is disposed when the page content swaps. Drop focus first
+        // so the disposal does not move focus to an unselected rail item (which
+        // navigates on focus); the target slot is refocused after recomposition.
+        focusManager.clearFocus()
         page = nextPage
         focusedSlot = slot
         refocusAfterPaging = true
